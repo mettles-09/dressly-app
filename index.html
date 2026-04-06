@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dressly — Your AI Stylist</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -85,10 +85,11 @@
       <div class="nav-tabs">
         <button class="tab active" onclick="showPage('wardrobe', this)">Wardrobe</button>
         <button class="tab" onclick="showPage('suggest', this)">Outfits</button>
+        <button class="tab" onclick="showPage('discover', this)">Discover</button>
         <button class="tab" onclick="showPage('saved', this)">Saved Looks</button>
         <button class="tab" onclick="showPage('profile', this)">Profile</button>
       </div>
-      <div class="nav-avatar" id="nav-avatar" onclick="showPage('profile', document.querySelector('.tab:nth-child(3)'))">
+      <div class="nav-avatar" id="nav-avatar" onclick="showPage('profile', document.querySelector('.tab:nth-child(5)'))">
         <span id="nav-initials"></span>
       </div>
     </div>
@@ -144,6 +145,33 @@
         <div class="empty-state">
           <div class="big-icon">✦</div>
           <p>Set your context and hit <em>Style me</em> to get AI outfit suggestions</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DISCOVER -->
+  <div class="page" id="page-discover">
+    <div class="section-head">
+      <h2>Discover Matches</h2>
+      <p>AI gap analysis to see what will multiply your wardrobe</p>
+    </div>
+    <div class="suggest-layout">
+      <div class="context-panel">
+        <h3>Shopping Advisor</h3>
+        <p style="font-size:13px; color:var(--muted); line-height:1.5; margin-bottom:12px;">We will analyze your clothes and suggest pieces that instantly pair with what you already own.</p>
+        <div class="context-field">
+          <label>Pair with specific item? (optional)</label>
+          <select id="ctx-discover-focus">
+            <option value="">Any item in wardrobe</option>
+          </select>
+        </div>
+        <button class="suggest-btn" id="discover-btn" onclick="analyzeWardrobeGaps()" style="margin-top:auto;">✦ Analyze Gaps</button>
+      </div>
+      <div class="results-panel" id="discover-results">
+        <div class="empty-state">
+          <div class="big-icon">✦</div>
+          <p>Hit <em>Analyze Gaps</em> to discover the missing pieces in your wardrobe</p>
         </div>
       </div>
     </div>
@@ -267,15 +295,15 @@
     <div class="form-row"><label>Name</label><input type="text" id="item-name" placeholder="e.g. White linen shirt" /></div>
     <div class="form-row"><label>Category</label>
       <select id="item-category">
-        <option>Top</option><option>Bottom</option><option>Dress / Kurta</option>
-        <option>Jacket / Blazer</option><option>Shoes</option><option>Accessory</option><option>Ethnic wear</option>
+        <option>Shirt</option><option>T-Shirt</option><option>Winter (Jacket/Sweater)</option>
+        <option>Bottom</option><option>Footwear</option><option>Accessory</option>
       </select>
     </div>
     <div class="form-row"><label>Colour</label><input type="text" id="item-color" placeholder="e.g. Navy blue, off-white" /></div>
     <div class="form-row"><label>Notes (optional)</label><input type="text" id="item-notes" placeholder="e.g. Cotton, slim fit" /></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="addItem()">Add item</button>
+      <button class="btn btn-primary" id="modal-submit-btn" onclick="saveModalItem()">Add item</button>
     </div>
   </div>
 </div>

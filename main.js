@@ -1,12 +1,11 @@
 // ======== STATE ========
 const EMOJIS = {
-  'Top': ['👕','👔','🎽','👗','🥻','👘'],
-  'Bottom': ['👖','🩲','🩳','🩱','👗','🧣'],
-  'Dress / Kurta': ['👗','🥻','👘','🩱','🎽','👚'],
-  'Jacket / Blazer': ['🧥','🥼','👔','🎩','🧤','🧦'],
-  'Shoes': ['👟','👠','👡','👞','🥾','🩴'],
-  'Accessory': ['👒','🎩','💍','👜','🕶️','⌚'],
-  'Ethnic wear': ['🥻','👘','🩱','👗','🎽','🩲'],
+  'Shirt': ['👔','👕','🎽','👚'],
+  'T-Shirt': ['👕','🎽'],
+  'Winter (Jacket/Sweater)': ['🧥','🥼','🧣','🧤'],
+  'Bottom': ['👖','🩳','👗','🩲'],
+  'Footwear': ['👟','👞','🥾','👠','👡','🩴'],
+  'Accessory': ['👒','🎩','💍','👜','🕶️','⌚', '🧣']
 };
 
 let wardrobe = JSON.parse(localStorage.getItem('dressly-wardrobe') || '[]');
@@ -15,6 +14,10 @@ let selectedEmoji = '👕';
 let clothingPhotoData = null; // base64 of processed clothing image
 let savedOutfits = JSON.parse(localStorage.getItem('dressly-saved-outfits') || '[]');
 let currentOutfits = []; // temporary holder for the latest AI suggestions
+let editingIdx = null;
+let categoryOrder = JSON.parse(localStorage.getItem('dressly-category-order') || '["Shirt", "T-Shirt", "Winter (Jacket/Sweater)", "Bottom", "Footwear", "Accessory"]');
+let draggedItem = null;
+let draggedCategory = null;
 
 // ======== LOGIN ========
 let loginStep = 0;
@@ -103,10 +106,33 @@ function initApp() {
   // Show photo analysis if photo uploaded
   if (user.photoData) showPhotoAnalysis();
 
+  // Migrate old categories to new ones
+  let migrated = false;
+  wardrobe.forEach(item => {
+    const oldCat = item.category;
+    if (oldCat === 'Top' || oldCat === 'Dress / Kurta' || oldCat === 'Ethnic wear') {
+      const name = (item.name || '').toLowerCase();
+      if (name.includes('sweater') || name.includes('hoodie') || name.includes('jacket') || name.includes('coat')) {
+        item.category = 'Winter (Jacket/Sweater)';
+      } else if (name.includes('tee') || name.includes('t-shirt') || name.includes('polo')) {
+        item.category = 'T-Shirt';
+      } else {
+        item.category = 'Shirt';
+      }
+      migrated = true;
+    } else if (oldCat === 'Jacket / Blazer') {
+      item.category = 'Winter (Jacket/Sweater)'; migrated = true;
+    } else if (oldCat === 'Shoes') {
+      item.category = 'Footwear'; migrated = true;
+    }
+  });
+  if (migrated) localStorage.setItem('dressly-wardrobe', JSON.stringify(wardrobe));
+
   updateProfileStats();
   renderWardrobe();
   renderSavedOutfits();
-  renderEmojiGrid('Top');
+  renderEmojiGrid('Shirt');
+  renderDiscoverFocusOptions();
 }
 
 function showPhotoAnalysis() {
@@ -195,6 +221,7 @@ function saveWardrobe() {
   localStorage.setItem('dressly-wardrobe', JSON.stringify(wardrobe));
   updateProfileStats();
   renderWardrobe();
+  renderDiscoverFocusOptions();
 }
 
 function renderWardrobe() {
@@ -215,22 +242,45 @@ function renderWardrobe() {
   const cats = [...new Set(wardrobe.map(i => i.category))];
   document.getElementById('stat-categories').innerHTML = `<b>${cats.length}</b> categories`;
 
-  let html = '<div class="wardrobe-grid">';
+  const grouped = {};
   wardrobe.forEach((item, idx) => {
-    const imgContent = item.photoData
-      ? `<img src="${item.photoData}" alt="${item.name}">`
-      : item.emoji;
-    html += `<div class="clothing-card">
-      <button class="remove-btn" onclick="removeItem(${idx})">×</button>
-      <div class="clothing-img">${imgContent}</div>
-      <div class="clothing-info">
-        <div class="clothing-name">${item.name}</div>
-        <span class="clothing-tag">${item.category}</span>
-        ${item.color ? `<div style="font-size:11px;color:var(--muted);margin-top:3px">${item.color}</div>` : ''}
-      </div>
-    </div>`;
+    if (!grouped[item.category]) grouped[item.category] = [];
+    grouped[item.category].push({ ...item, origIdx: idx });
   });
-  html += `<div class="add-card" onclick="openModal()"><span>+</span><p>Add item</p></div></div>`;
+
+  const categoriesToRender = categoryOrder.filter(c => grouped[c]?.length > 0);
+  cats.forEach(c => { if (!categoryOrder.includes(c)) categoriesToRender.push(c); });
+
+  let html = '';
+  categoriesToRender.forEach(cat => {
+    html += `<div class="category-block" draggable="true" data-cat="${cat}">
+      <div class="category-header">
+        <div class="drag-handle" title="Drag to reorder category">⋮⋮</div>
+        <h3>${cat}</h3>
+      </div>
+      <div class="wardrobe-grid" data-cat="${cat}">`;
+    grouped[cat].forEach(item => {
+      const idx = item.origIdx;
+      const imgContent = item.photoData
+        ? `<img src="${item.photoData}" alt="${item.name}">`
+        : item.emoji;
+      html += `<div class="clothing-card" draggable="true" data-idx="${idx}">
+        <button class="remove-btn" onclick="removeItem(${idx})">×</button>
+        <div class="clothing-img">${imgContent}</div>
+        <div class="clothing-info">
+          <div class="clothing-name">${item.name}</div>
+          ${item.color ? `<div style="font-size:11px;color:var(--muted);margin-top:3px">${item.color}</div>` : ''}
+        </div>
+        <button class="edit-btn" onclick="openModal(${idx}); event.stopPropagation();">✎</button>
+      </div>`;
+    });
+    html += `</div></div>`;
+  });
+
+  html += `<div style="margin-top: 32px; text-align:center;">
+    <button class="btn btn-primary" style="padding:12px 28px; width:auto; border-radius:30px; box-shadow:0 4px 12px rgba(0,0,0,0.1);" onclick="openModal()">+ Add New Item</button>
+  </div>`;
+  
   container.innerHTML = html;
 }
 
@@ -245,21 +295,64 @@ function updateProfileStats() {
   document.getElementById('pstat-outfits').textContent = savedOutfits.length;
 }
 
-// ======== ADD MODAL ========
-function openModal() {
-  selectedEmoji = '👕';
-  clothingPhotoData = null;
-  document.getElementById('item-name').value = '';
-  document.getElementById('item-color').value = '';
-  document.getElementById('item-notes').value = '';
-  document.getElementById('item-category').value = 'Top';
-  // Reset photo upload
-  const upload = document.getElementById('cloth-photo-upload');
-  upload.classList.remove('has-image');
-  const c = document.getElementById('cloth-canvas');
-  c.style.display = 'none';
+function renderDiscoverFocusOptions() {
+  const select = document.getElementById('ctx-discover-focus');
+  if (!select) return;
+  let html = '<option value="">Any item in wardrobe</option>';
+  wardrobe.forEach(item => {
+    html += `<option value="${item.name}">${item.emoji || '👗'} ${item.name}</option>`;
+  });
+  select.innerHTML = html;
+}
+
+// ======== ADD / EDIT MODAL ========
+function openModal(idx) {
+  if (typeof idx === 'number') {
+    editingIdx = idx;
+    const item = wardrobe[idx];
+    document.getElementById('item-name').value = item.name || '';
+    document.getElementById('item-category').value = item.category || 'Shirt';
+    document.getElementById('item-color').value = item.color || '';
+    document.getElementById('item-notes').value = item.notes || '';
+    document.getElementById('modal-submit-btn').textContent = 'Save changes';
+    document.querySelector('.modal h3').textContent = 'Edit item';
+    
+    selectedEmoji = item.emoji || '👕';
+    clothingPhotoData = item.photoData || null;
+
+    const upload = document.getElementById('cloth-photo-upload');
+    const c = document.getElementById('cloth-canvas');
+    if (clothingPhotoData) {
+      upload.classList.add('has-image');
+      const img = new Image();
+      img.onload = () => {
+        c.width = 300; c.height = 400;
+        c.getContext('2d').drawImage(img, 0, 0, 300, 400);
+        c.style.display = 'block';
+      };
+      img.src = clothingPhotoData;
+    } else {
+      upload.classList.remove('has-image');
+      c.style.display = 'none';
+      renderEmojiGrid(item.category);
+    }
+  } else {
+    editingIdx = null;
+    selectedEmoji = '👕';
+    clothingPhotoData = null;
+    document.getElementById('item-name').value = '';
+    document.getElementById('item-category').value = 'Shirt';
+    document.getElementById('item-color').value = '';
+    document.getElementById('item-notes').value = '';
+    document.getElementById('modal-submit-btn').textContent = 'Add item';
+    document.querySelector('.modal h3').textContent = 'Add to wardrobe';
+    
+    const upload = document.getElementById('cloth-photo-upload');
+    upload.classList.remove('has-image');
+    document.getElementById('cloth-canvas').style.display = 'none';
+    renderEmojiGrid('Shirt');
+  }
   document.getElementById('processing-indicator').style.display = 'none';
-  renderEmojiGrid('Top');
   document.getElementById('modal').classList.add('open');
 }
 function closeModal() { document.getElementById('modal').classList.remove('open'); }
@@ -274,7 +367,7 @@ function renderEmojiGrid(cat) {
 
 document.getElementById('item-category').onchange = function() {
   renderEmojiGrid(this.value);
-  selectedEmoji = (EMOJIS[this.value] || EMOJIS['Top'])[0];
+  selectedEmoji = (EMOJIS[this.value] || EMOJIS['Shirt'])[0];
 };
 
 function selectEmoji(e, btn) {
@@ -289,20 +382,28 @@ function selectEmoji(e, btn) {
   btn.classList.add('selected');
 }
 
-function addItem() {
+function saveModalItem() {
   const name = document.getElementById('item-name').value.trim();
   if (!name) { showToast('Please give your item a name'); return; }
-  wardrobe.push({
+  
+  const newItem = {
     emoji: clothingPhotoData ? null : (selectedEmoji || '👕'),
     photoData: clothingPhotoData || null,
     name,
     category: document.getElementById('item-category').value,
     color: document.getElementById('item-color').value.trim(),
     notes: document.getElementById('item-notes').value.trim(),
-  });
+  };
+
+  if (editingIdx !== null) {
+    wardrobe[editingIdx] = newItem;
+    showToast('Item updated ✓');
+  } else {
+    wardrobe.push(newItem);
+    showToast('Added to wardrobe ✓');
+  }
   saveWardrobe();
   closeModal();
-  showToast('Added to wardrobe ✓');
 }
 
 // ======== AI SUGGESTIONS ========
@@ -572,7 +673,7 @@ if (user) {
   document.getElementById('app').style.display = 'block';
   initApp();
 } else {
-  renderEmojiGrid('Top');
+  renderEmojiGrid('Shirt');
 }
 
 // Sample wardrobe if empty
@@ -588,6 +689,92 @@ if (user && wardrobe.length === 0) {
     { emoji: '👞', name: 'Brown loafers', category: 'Shoes', color: 'Tan brown', notes: 'Leather' },
   ];
   saveWardrobe();
+} else {
+  renderDiscoverFocusOptions();
+}
+
+// ======== DISCOVER (SHOPPING GAP ADVISOR) ========
+async function analyzeWardrobeGaps() {
+  if (wardrobe.length < 3) { showToast('Add at least 3 items to get meaningful shopping advice'); return; }
+  const btn = document.getElementById('discover-btn');
+  const panel = document.getElementById('discover-results');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-spinner"></span> Analyzing…';
+
+  panel.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Finding the missing pieces in your wardrobe…</p></div>`;
+
+  const profile = {
+    gender: user?.gender || 'unknown',
+    age: user?.age || 'unknown',
+    styles: [...document.querySelectorAll('#style-chips .chip.selected')].map(c => c.textContent),
+    colors: [...document.querySelectorAll('#color-chips .chip.selected')].map(c => c.textContent),
+  };
+
+  const wardrobeDesc = wardrobe.map(i =>
+    `- ${i.emoji || '👗'} ${i.name} (${i.category}${i.color ? ', ' + i.color : ''})`
+  ).join('\n');
+
+  const focusItem = document.getElementById('ctx-discover-focus').value;
+  const focusContext = focusItem ? `\nCRITICAL REQUIREMENT: The user specifically wants to find new items that pair well with their existing "${focusItem}". Focus the suggestions around pairing with this item.` : '';
+
+  const prompt = `You are an extremely creative, high-fashion expert personal stylist and shopping advisor. Review the user's profile and current wardrobe.
+Identify exactly 3 distinct core or statement pieces they do NOT currently own. THINK OUTSIDE THE BOX. Suggest high-impact, modern, and very specific items to maximize wardrobe versatility and elevate their look.${focusContext}
+
+USER PROFILE:
+- Gender: ${profile.gender}
+- Age: ${profile.age}
+- Style: ${profile.styles.join(', ')}
+- Colors: ${profile.colors.join(', ')}
+
+CURRENT WARDROBE:
+${wardrobeDesc}
+
+Respond ONLY with a valid JSON array of 3 objects (no markdown blocks, no preamble). 
+Format for each object:
+{"itemTitle":"Name of item to buy","emoji":"1 emoji","description":"Write 2-3 flowing sentences. Explain why they need this piece, and EXPLICITLY state how it pairs perfectly with specific items they already own from their wardrobe list."}`;
+
+  try {
+    const resp = await fetch('/api/suggest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: prompt }] }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      panel.innerHTML = `<div class="empty-state"><div class="big-icon">⚠</div><p>Server error ${resp.status}</p></div>`;
+      btn.disabled = false; btn.innerHTML = '✦ Analyze Gaps'; return;
+    }
+
+    const data = await resp.json();
+    const rawText = (data.content || []).map(b => b.text || '').join('');
+    const items = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+
+    panel.innerHTML = '';
+    items.forEach(item => {
+      const title = item.itemTitle || item.name || item.title || item.item || 'Suggested Item';
+      const promptQuery = encodeURIComponent('minimalist high fashion photography of a single ' + title + ' laying flat on solid white background studio lighting');
+      const imgSrc = `https://image.pollinations.ai/prompt/${promptQuery}?width=200&height=200&nologo=true`;
+      
+      const div = document.createElement('div');
+      div.className = 'discover-card';
+      div.innerHTML = `
+        <div class="discover-header">
+          <div class="discover-icon" style="overflow:hidden; border-radius:0px;">
+            <img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;" onerror="this.outerHTML='${item.emoji || '🛍️'}'" alt="${title}" />
+          </div>
+          <div>
+            <div class="discover-title">${title}</div>
+            <div class="discover-reason" style="margin-top:8px;">${item.description || item.reason || ''}</div>
+          </div>
+        </div>`;
+      panel.appendChild(div);
+    });
+
+  } catch(e) {
+    panel.innerHTML = `<div class="empty-state"><div class="big-icon">⚠</div><p><b>Error:</b> ${e.message}</p></div>`;
+  }
+  btn.disabled = false; btn.innerHTML = '✦ Analyze Gaps';
 }
 
 // ======== WEATHER FETCH ========
@@ -640,3 +827,92 @@ async function detectWeather() {
     btn.disabled = false;
   });
 }
+
+// ======== DRAG & DROP ========
+document.addEventListener('dragstart', e => {
+  const t = e.target;
+  if (t.classList.contains('drag-handle') || t.classList.contains('category-block')) {
+     const block = t.closest('.category-block');
+     draggedCategory = block;
+     if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+     setTimeout(() => block.classList.add('dragging'), 0);
+  } else if (t.classList && t.classList.contains('clothing-card')) {
+     draggedItem = t;
+     if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+     setTimeout(() => t.classList.add('dragging'), 0);
+  }
+});
+
+document.addEventListener('dragover', e => {
+  if (draggedCategory || draggedItem) e.preventDefault();
+  if (draggedCategory) {
+     const overBlock = e.target.closest('.category-block');
+     if (overBlock && overBlock !== draggedCategory) {
+        document.querySelectorAll('.category-block').forEach(b => b.classList.remove('drag-over'));
+        overBlock.classList.add('drag-over');
+     }
+  } else if (draggedItem) {
+     const card = e.target.closest('.clothing-card');
+     const grid = e.target.closest('.wardrobe-grid');
+     if (grid) {
+        grid.classList.add('drag-over');
+        if (card && card !== draggedItem) {
+           const rect = card.getBoundingClientRect();
+           const next = (e.clientY - rect.top) / (rect.bottom - rect.top) > 0.5;
+           grid.insertBefore(draggedItem, next && card.nextSibling || card);
+        } else if (!card && grid !== draggedItem.parentNode) {
+           grid.appendChild(draggedItem);
+        }
+     }
+  }
+});
+
+document.addEventListener('dragend', e => {
+  if (draggedCategory) draggedCategory.classList.remove('dragging');
+  if (draggedItem) draggedItem.classList.remove('dragging');
+  document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+  draggedCategory = null;
+  draggedItem = null;
+});
+
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+  
+  if (draggedCategory) {
+     const overBlock = e.target.closest('.category-block');
+     if (overBlock && overBlock !== draggedCategory) {
+        const parent = overBlock.parentNode;
+        const rect = overBlock.getBoundingClientRect();
+        const next = (e.clientY - rect.top) / (rect.bottom - rect.top) > 0.5;
+        parent.insertBefore(draggedCategory, next && overBlock.nextSibling || overBlock);
+        
+        const newOrder = [...document.querySelectorAll('.category-block')].map(b => b.getAttribute('data-cat'));
+        categoryOrder = newOrder;
+        localStorage.setItem('dressly-category-order', JSON.stringify(categoryOrder));
+        renderWardrobe();
+     }
+  } else if (draggedItem) {
+     const grids = document.querySelectorAll('.wardrobe-grid');
+     const newWardrobe = [];
+     grids.forEach(grid => {
+        const cat = grid.getAttribute('data-cat');
+        const cards = grid.querySelectorAll('.clothing-card');
+        cards.forEach(card => {
+           const idx = parseInt(card.getAttribute('data-idx'));
+           const item = wardrobe[idx];
+           if (item) {
+              item.category = cat;
+              newWardrobe.push(item);
+           }
+        });
+     });
+     wardrobe = newWardrobe;
+     saveWardrobe();
+  }
+  
+  if (draggedCategory) draggedCategory.classList.remove('dragging');
+  if (draggedItem) draggedItem.classList.remove('dragging');
+  draggedCategory = null;
+  draggedItem = null;
+});
