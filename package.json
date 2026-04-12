@@ -1,0 +1,27 @@
+{
+  "name": "dressly-app",
+  "version": "1.0.0",
+  "description": "- Node.js (https://nodejs.org — LTS version) - Anthropic API key (https://console.anthropic.com) — optional, app works in demo mode without it",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mettles-09/dressly-app.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/mettles-09/dressly-app/issues"
+  },
+  "homepage": "https://github.com/mettles-09/dressly-app#readme",
+  "dependencies": {
+    "@capacitor/cli": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
+    "@capacitor/ios": "^8.3.0"
+  }
+}
